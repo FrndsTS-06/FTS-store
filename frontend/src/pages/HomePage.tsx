@@ -19,7 +19,6 @@ import {
 
 import { HeroBanner } from '../components/home/HeroBanner';
 import { CategoryShortcuts } from '../components/home/CategoryShortcuts';
-import { FtsGlassShowcase } from '../components/home/FtsGlassShowcase';
 import { FeaturedProductsSection } from '../components/home/FeaturedProductsSection';
 import { PromoBanners } from '../components/home/PromoBanners';
 import { DealsOfTheDaySection } from '../components/home/DealsOfTheDaySection';
@@ -103,10 +102,7 @@ export const HomePage: React.FC = () => {
         ))}
       </section>
 
-      {/* 4. Phase 1 Representative Component: FTS Cyber Glass Innovation Showcase */}
-      <FtsGlassShowcase />
-
-      {/* 5. Six-Column Featured Products Section */}
+      {/* 4. Six-Column Featured Products Section */}
       <FeaturedProductsSection />
 
       {/* 6. Two Side-by-Side Promotional Banners (Laptops & Smart Home) */}
