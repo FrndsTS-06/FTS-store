@@ -181,7 +181,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 8 }}
             transition={shouldReduceMotion ? { duration: 0.15 } : MOTION_SPRINGS.smooth}
-            className="relative w-full max-w-3xl glass-panel rounded-3xl shadow-2xl shadow-black/80 overflow-hidden z-10 flex flex-col my-auto"
+            className="relative w-full max-w-3xl fts-glass-panel fts-specular-edge rounded-3xl shadow-2xl shadow-black/80 overflow-hidden z-10 flex flex-col my-auto border border-slate-700/60"
           >
             {/* Top Close Button */}
             <motion.button
@@ -322,17 +322,29 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   {/* Stock Status Pill */}
                   <div className="mb-4">
                     {!product.is_in_stock || product.stock_status === 'out_of_stock' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                        </span>
                         <XCircle className="w-3.5 h-3.5" />
                         Currently Out of Stock
                       </span>
                     ) : product.stock_quantity <= 5 || product.stock_status === 'low_stock' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                        </span>
                         <AlertTriangle className="w-3.5 h-3.5" />
                         Only {product.stock_quantity} units remaining
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         In Stock & Ready to Ship
                       </span>
@@ -386,9 +398,9 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     disabled={!product.is_in_stock || isAdding || isUpdating}
                     className={`w-full py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-400/40 disabled:opacity-50 disabled:cursor-not-allowed ${
                       justAdded
-                        ? 'bg-emerald-600 text-white shadow-emerald-500/30'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-emerald-500/30'
                         : product.is_in_stock
-                        ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-blue-600/30'
+                        ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-blue-600/30'
                         : 'bg-slate-800 text-slate-500'
                     }`}
                   >
