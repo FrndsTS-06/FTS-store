@@ -1,0 +1,12 @@
+{
+  "name": "fts-store-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FTS Store Workspace root scripts",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}
