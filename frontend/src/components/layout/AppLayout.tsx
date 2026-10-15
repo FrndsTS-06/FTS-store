@@ -9,6 +9,7 @@ import { CartDrawer } from '../cart/CartDrawer';
 import { ShoppingFeedbackToast } from '../cart/ShoppingFeedbackToast';
 import { AnimatedBackground } from '../common/AnimatedBackground';
 import { ScrollToTopButton } from '../common/ScrollToTopButton';
+import { FloatingBrandLogo } from '../common/FloatingBrandLogo';
 import { usePrefersReducedMotion } from '../../motion';
 
 export const AppLayout: React.FC = () => {
@@ -64,6 +65,9 @@ export const AppLayout: React.FC = () => {
 
       {/* Floating Animated Scroll To Top Button */}
       <ScrollToTopButton />
+
+      {/* Floating Official FTS Brand Element in Bottom-Right Corner */}
+      <FloatingBrandLogo />
     </div>
   );
 };

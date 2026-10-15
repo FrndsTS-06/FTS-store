@@ -41,7 +41,7 @@ export const ScrollToTopButton: React.FC = () => {
           whileTap={shouldReduceMotion ? undefined : tapFeedback}
           transition={{ duration: shouldReduceMotion ? 0.15 : 0.25, ease: 'easeOut' }}
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 p-3.5 rounded-2xl bg-indigo-600/90 hover:bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 backdrop-blur-md border border-indigo-400/30 cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-500/40 group"
+          className="fixed bottom-24 sm:bottom-36 right-4 sm:right-6 z-40 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-cyan-300 hover:text-white shadow-xl shadow-cyan-900/30 backdrop-blur-xl border border-cyan-500/40 cursor-pointer focus:outline-none focus:ring-4 focus:ring-cyan-500/40 group"
           aria-label="Scroll to top of page"
         >
           <ArrowUp className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform duration-200" />

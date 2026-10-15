@@ -1,21 +1,13 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import {
   ShieldCheck,
   Truck,
   RotateCcw,
-  Headphones,
-  HeartHandshake,
-  ArrowRight
+  Headphones
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PageContainer } from '../components/common/PageContainer';
-import {
-  GlassPanel,
-  GlassCard,
-  GlassButton,
-  GlassBadge
-} from '../components/common/glass';
+import { GlassCard } from '../components/common/glass';
 
 import { HeroBanner } from '../components/home/HeroBanner';
 import { CategoryShortcuts } from '../components/home/CategoryShortcuts';
@@ -119,42 +111,6 @@ export const HomePage: React.FC = () => {
 
       {/* 10. Vibrant Blue Tech Insider Newsletter Strip */}
       <NewsletterStrip />
-
-      {/* 11. Brand Heritage / Trust Banner Upgraded with GlassPanel & GlassButton */}
-      <motion.section
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 25 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-50px' }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="mb-12"
-      >
-        <GlassPanel
-          variant="elevated"
-          hasSpecularEdge={true}
-          isLuminous={true}
-          className="p-8 sm:p-12 text-center max-w-4xl mx-auto border border-white/15 bg-gradient-to-r from-blue-950/40 via-slate-900/80 to-indigo-950/40"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-blue-500/15 border border-blue-400/30 text-blue-400 flex items-center justify-center mx-auto mb-4 animate-float shadow-fts-glow-blue">
-            <HeartHandshake className="w-6 h-6" />
-          </div>
-          <div className="inline-block mb-3">
-            <GlassBadge variant="cyan" hasDot={true}>
-              GUARANTEED CRAFTSMANSHIP
-            </GlassBadge>
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3 font-display">
-            Engineered by Frnds Tech Solution
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl mx-auto mb-6">
-            Every product in our catalog meets rigorous quality standards. From premium hardware to lifestyle equipment, experience guaranteed craftsmanship backed by our team.
-          </p>
-          <Link to="/products">
-            <GlassButton variant="cyber" size="md" icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">
-              Start Shopping
-            </GlassButton>
-          </Link>
-        </GlassPanel>
-      </motion.section>
     </PageContainer>
   );
 };
