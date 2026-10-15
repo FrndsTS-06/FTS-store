@@ -1,9 +1,10 @@
-import React, { useState, useRef, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Maximize2, X, ChevronLeft, ChevronRight, Sparkles, Box, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import { ProductImage } from '../../types/catalog';
 import { getFallbackImage } from '../../utils/formatters';
 import { usePrefersReducedMotion } from '../../motion';
+import { hasModelForProduct } from '../../utils/product3d';
 
 const LazyProduct3DViewer = lazy(() => import('./Product3DViewer'));
 
@@ -27,9 +28,18 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   const defaultFallback = getFallbackImage(categorySlug);
   const shouldReduceMotion = usePrefersReducedMotion();
 
-  // Mode: 2D Photo vs Interactive 3D Studio
-  const [viewMode, setViewMode] = useState<'photo' | '3d'>('photo');
+  // Determine whether an authentic 3D model asset exists for this product
+  const has3DModel = hasModelForProduct(categorySlug, productName);
+
+  // Mode: Default to 3D Studio if an authentic model asset exists, otherwise Photo Stage
+  const [viewMode, setViewMode] = useState<'photo' | '3d'>(() => (has3DModel ? '3d' : 'photo'));
   const [is3DStudioActive, setIs3DStudioActive] = useState(false);
+
+  // Sync mode when product or category changes
+  useEffect(() => {
+    setViewMode(has3DModel ? '3d' : 'photo');
+    setIs3DStudioActive(false);
+  }, [categorySlug, productName, has3DModel]);
 
   // Sorted gallery images
   const galleryList = images.length > 0
@@ -123,11 +133,17 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           >
             <Box className="w-3.5 h-3.5 text-cyan-400" />
             <span>3D Interactive</span>
+            {!has3DModel && (
+              <span className="text-[9px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Asset Pending
+              </span>
+            )}
           </button>
         </div>
 
         {viewMode === '3d' && is3DStudioActive && (
-          <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-xl hidden sm:inline-block">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.2)] backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
             WebGL 3D Studio Active
           </span>
         )}

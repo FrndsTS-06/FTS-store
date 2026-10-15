@@ -3,8 +3,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCw, RefreshCw, AlertCircle, Sparkles, Image as ImageIcon, ZoomIn } from 'lucide-react';
+import { RotateCw, RefreshCw, AlertCircle, Sparkles, Image as ImageIcon, ZoomIn, FileCode } from 'lucide-react';
 import { usePrefersReducedMotion } from '../../motion';
+import { getModelUrlForCategory } from '../../utils/product3d';
+
+export { getModelUrlForCategory };
 
 export interface Product3DViewerProps {
   productName: string;
@@ -14,27 +17,6 @@ export interface Product3DViewerProps {
   className?: string;
   onSwitchToPhoto?: () => void;
   onActiveChange?: (isActive: boolean) => void;
-}
-
-/**
- * Determine the optimal 3D model URL based on the product name and category
- */
-export function getModelUrlForCategory(categorySlug?: string, productName?: string): string {
-  const combined = `${productName || ''} ${categorySlug || ''}`.toLowerCase();
-  if (combined.includes('headphone') || combined.includes('earbud') || combined.includes('audio') || combined.includes('sound')) {
-    return '/models/headphones.glb';
-  }
-  if (combined.includes('watch') || combined.includes('wearable') || combined.includes('band')) {
-    return '/models/smartwatch.glb';
-  }
-  if (combined.includes('mobile') || combined.includes('phone') || combined.includes('smartphone')) {
-    return '/models/smartphone.glb';
-  }
-  if (combined.includes('laptop') || combined.includes('computer') || combined.includes('pc') || combined.includes('macbook') || combined.includes('notebook')) {
-    return '/models/laptop.glb';
-  }
-  // Default to laptop for electronics / flagship tech
-  return '/models/laptop.glb';
 }
 
 function checkWebGLSupport(): boolean {
@@ -69,6 +51,12 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
   const [fps, setFps] = useState<number>(60);
   const [retryCount, setRetryCount] = useState<number>(0);
 
+  // Maintain stable reference to onActiveChange to prevent unnecessary scene re-mounts
+  const onActiveChangeRef = useRef(onActiveChange);
+  useEffect(() => {
+    onActiveChangeRef.current = onActiveChange;
+  }, [onActiveChange]);
+
   // References for Three.js instance management
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -94,16 +82,26 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
   useEffect(() => {
     let isMounted = true;
 
+    // Case 1: No 3D model asset authored for this product
+    if (!activeModelUrl) {
+      setIsLoading(false);
+      onActiveChangeRef.current?.(false);
+      return;
+    }
+
+    // Case 2: WebGL unsupported in browser environment
     if (!checkWebGLSupport()) {
       setWebGlSupported(false);
       setIsLoading(false);
-      onActiveChange?.(false);
+      onActiveChangeRef.current?.(false);
       return;
     }
 
     const container = containerRef.current;
     const canvas = canvasRef.current;
-    if (!container || !canvas) return;
+    if (!container || !canvas) {
+      return;
+    }
 
     const width = container.clientWidth || 400;
     const height = container.clientHeight || 400;
@@ -117,7 +115,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
     camera.position.set(0, 1.2, 6.5);
     cameraRef.current = camera;
 
-    // 3. WebGLRenderer (without forceContextLoss on cleanup)
+    // 3. WebGLRenderer (Strictly avoid forceContextLoss on cleanup for React 18 compatibility)
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
@@ -132,11 +130,11 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
       renderer.toneMappingExposure = 1.2;
       rendererRef.current = renderer;
     } catch (err: any) {
-      console.warn('WebGL Renderer initialization error:', err);
+      console.warn('WebGL Renderer initialization failed:', err);
       if (isMounted) {
         setWebGlSupported(false);
         setIsLoading(false);
-        onActiveChange?.(false);
+        onActiveChangeRef.current?.(false);
       }
       return;
     }
@@ -226,15 +224,15 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         scene.add(model);
         setIsLoading(false);
         setLoadError(null);
-        onActiveChange?.(true);
+        onActiveChangeRef.current?.(true);
       },
       undefined,
       (err) => {
         if (!isMounted) return;
-        console.error('Failed to load 3D GLB model from:', activeModelUrl, err);
+        console.warn('Failed to load 3D GLB model from:', activeModelUrl, err);
         setIsLoading(false);
-        setLoadError(`Unable to load 3D model asset (${activeModelUrl.split('/').pop()}).`);
-        onActiveChange?.(false);
+        setLoadError(`Unable to load 3D model asset (${activeModelUrl.split('/').pop()}). Check network connection.`);
+        onActiveChangeRef.current?.(false);
       }
     );
 
@@ -275,7 +273,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
     // 9. Component Unmount and Resource Disposal
     return () => {
       isMounted = false;
-      onActiveChange?.(false);
+      onActiveChangeRef.current?.(false);
       resizeObserver.disconnect();
 
       if (animFrameIdRef.current) {
@@ -313,16 +311,59 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
       cameraRef.current = null;
       currentModelRef.current = null;
     };
-  }, [activeModelUrl, autoRotate, shouldReduceMotion, retryCount, onActiveChange]);
+  }, [activeModelUrl, retryCount]); // Only re-init when model or retryCount changes, NOT on autoRotate toggle
 
-  // Sync autoRotate state with controls
+  // Sync autoRotate state with OrbitControls smoothly in-place without reloading the scene
   useEffect(() => {
     if (controlsRef.current) {
       controlsRef.current.autoRotate = autoRotate && !shouldReduceMotion;
     }
   }, [autoRotate, shouldReduceMotion]);
 
-  // If WebGL is not supported, show high-resolution photo fallback
+  // Case A: Product has NO 3D model asset authored
+  if (!activeModelUrl) {
+    return (
+      <div className={`relative aspect-square w-full rounded-3xl overflow-hidden fts-glass-panel fts-specular-edge border border-slate-700/60 p-6 flex flex-col items-center justify-center text-center ${className}`}>
+        <div className="pointer-events-none absolute -top-20 -left-20 w-48 h-48 bg-blue-500/15 rounded-full blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 -right-20 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl" />
+
+        <div className="relative max-h-52 w-full flex items-center justify-center mb-4">
+          <img
+            src={fallbackImage}
+            alt={productName}
+            className="max-h-48 max-w-full object-contain filter drop-shadow-2xl"
+          />
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 text-amber-300 border border-amber-500/40 text-xs font-semibold backdrop-blur-md mb-2">
+          <FileCode className="w-3.5 h-3.5 text-amber-400" />
+          <span>3D Asset Pending for this Category</span>
+        </div>
+
+        <p className="text-xs text-slate-200 max-w-sm mb-1 font-semibold">
+          No dedicated 3D interactive model asset has been uploaded for this item.
+        </p>
+
+        <p className="text-[11px] text-slate-400 max-w-sm mb-4 leading-relaxed">
+          <span className="text-cyan-300 font-semibold">Required Asset:</span> A binary GLB (<code className="text-cyan-300">.glb</code>) or GLTF (<code className="text-cyan-300">.gltf</code>) file with PBR textures authored in <code className="text-slate-300">frontend/public/models/</code>.
+        </p>
+
+        {onSwitchToPhoto && (
+          <button
+            id="switch-to-photo-fallback-btn"
+            type="button"
+            onClick={onSwitchToPhoto}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>Switch to High-Res Photo Stage</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Case B: WebGL is unsupported or disabled in the browser environment
   if (!webGlSupported) {
     return (
       <div className={`relative aspect-square w-full rounded-3xl overflow-hidden fts-glass-panel fts-specular-edge border border-slate-700/60 p-6 flex flex-col items-center justify-center text-center ${className}`}>
@@ -333,13 +374,14 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         />
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-amber-300 border border-amber-500/30 text-xs font-semibold backdrop-blur-md mb-2">
           <AlertCircle className="w-4 h-4 text-amber-400" />
-          <span>WebGL acceleration unavailable</span>
+          <span>WebGL Acceleration Unavailable</span>
         </div>
         <p className="text-xs text-slate-400 max-w-xs mb-3">
           Displaying high-resolution visual render with full color fidelity.
         </p>
         {onSwitchToPhoto && (
           <button
+            id="switch-to-photo-btn-webgl-fail"
             type="button"
             onClick={onSwitchToPhoto}
             className="text-xs font-bold text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
@@ -351,6 +393,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
     );
   }
 
+  // Case C: Active 3D Studio Canvas with GLB Model
   return (
     <div
       ref={containerRef}
@@ -437,6 +480,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
           {/* Reset Camera View */}
           <button
             type="button"
+            id="reset-3d-view-btn"
             onClick={handleResetView}
             aria-label="Reset 3D camera orientation"
             title="Reset Orientation"
@@ -448,6 +492,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
           {/* Auto-Rotation Toggle */}
           <button
             type="button"
+            id="toggle-3d-autorotate-btn"
             onClick={() => setAutoRotate((prev) => !prev)}
             aria-label={autoRotate ? 'Pause 3D auto-rotation' : 'Start 3D auto-rotation'}
             title={autoRotate ? 'Pause Rotation' : 'Auto-Rotate'}
@@ -471,6 +516,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         {onSwitchToPhoto && (
           <button
             type="button"
+            id="switch-to-photo-from-canvas-btn"
             onClick={onSwitchToPhoto}
             aria-label="Switch back to photo gallery"
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-xs font-bold text-slate-200 hover:text-white border border-slate-700/70 shadow-lg backdrop-blur-md transition-all cursor-pointer"
