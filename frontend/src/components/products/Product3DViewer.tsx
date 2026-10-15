@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCw, RefreshCw, AlertCircle, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { RotateCw, RefreshCw, AlertCircle, Sparkles, Image as ImageIcon, ZoomIn } from 'lucide-react';
 import { usePrefersReducedMotion } from '../../motion';
 
 export interface Product3DViewerProps {
@@ -11,16 +13,36 @@ export interface Product3DViewerProps {
   modelUrl?: string;
   className?: string;
   onSwitchToPhoto?: () => void;
+  onActiveChange?: (isActive: boolean) => void;
+}
+
+/**
+ * Determine the optimal 3D model URL based on the product name and category
+ */
+export function getModelUrlForCategory(categorySlug?: string, productName?: string): string {
+  const combined = `${productName || ''} ${categorySlug || ''}`.toLowerCase();
+  if (combined.includes('headphone') || combined.includes('earbud') || combined.includes('audio') || combined.includes('sound')) {
+    return '/models/headphones.glb';
+  }
+  if (combined.includes('watch') || combined.includes('wearable') || combined.includes('band')) {
+    return '/models/smartwatch.glb';
+  }
+  if (combined.includes('mobile') || combined.includes('phone') || combined.includes('smartphone')) {
+    return '/models/smartphone.glb';
+  }
+  if (combined.includes('laptop') || combined.includes('computer') || combined.includes('pc') || combined.includes('macbook') || combined.includes('notebook')) {
+    return '/models/laptop.glb';
+  }
+  // Default to laptop for electronics / flagship tech
+  return '/models/laptop.glb';
 }
 
 function checkWebGLSupport(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    if (typeof window === 'undefined' || !window.WebGLRenderingContext) return false;
-    const canvas = document.createElement('canvas');
-    const gl = (canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as (WebGLRenderingContext | WebGL2RenderingContext) | null;
-    if (!gl) return false;
-    const precision = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
-    return !!(precision && precision.precision > 0);
+    const testCanvas = document.createElement('canvas');
+    const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    return !!gl;
   } catch {
     return false;
   }
@@ -30,220 +52,52 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
   productName,
   categorySlug,
   fallbackImage,
+  modelUrl,
   className = '',
   onSwitchToPhoto,
+  onActiveChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const shouldReduceMotion = usePrefersReducedMotion();
 
-  const isInitiallySupported = checkWebGLSupport();
-  const [webGlSupported, setWebGlSupported] = useState(isInitiallySupported);
-  const [isLoading, setIsLoading] = useState(isInitiallySupported);
+  const isSupported = checkWebGLSupport();
+  const [webGlSupported, setWebGlSupported] = useState(isSupported);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [autoRotate, setAutoRotate] = useState(!shouldReduceMotion);
   const [fps, setFps] = useState<number>(60);
+  const [retryCount, setRetryCount] = useState<number>(0);
 
-  // References for Three.js lifecycle management
+  // References for Three.js instance management
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
-  const productGroupRef = useRef<THREE.Group | null>(null);
+  const currentModelRef = useRef<THREE.Group | null>(null);
 
-  // Pointer drag state for controlled rotation
-  const isDraggingRef = useRef(false);
-  const previousPointerPosRef = useRef({ x: 0, y: 0 });
-  const rotationVelocityRef = useRef({ x: 0, y: 0 });
-  const targetRotationRef = useRef({ x: 0.15, y: -0.3 });
+  const activeModelUrl = modelUrl || getModelUrlForCategory(categorySlug, productName);
 
-  // Build high-detail procedural product asset based on category
-  const createProductMesh = useCallback((category?: string): THREE.Group => {
-    const group = new THREE.Group();
-    const cat = category?.toLowerCase() || '';
-
-    // Cyber PBR Materials
-    const metalMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      metalness: 0.85,
-      roughness: 0.2,
-    });
-
-    const brushedChromeMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      metalness: 0.95,
-      roughness: 0.15,
-    });
-
-    const leatherMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      roughness: 0.75,
-      metalness: 0.1,
-    });
-
-    const cyanGlowMat = new THREE.MeshStandardMaterial({
-      color: 0x06b6d4,
-      emissive: 0x06b6d4,
-      emissiveIntensity: 0.8,
-      roughness: 0.3,
-      metalness: 0.5,
-    });
-
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      transparent: true,
-      opacity: 0.7,
-      roughness: 0.1,
-      metalness: 0.9,
-    });
-
-    if (cat.includes('watch') || cat.includes('wearable')) {
-      // 1. Smartwatch / Wearable
-      // Body
-      const bodyGeom = new THREE.CylinderGeometry(1.6, 1.6, 0.45, 32);
-      const bodyMesh = new THREE.Mesh(bodyGeom, brushedChromeMat);
-      group.add(bodyMesh);
-
-      // Glass Screen
-      const screenGeom = new THREE.CylinderGeometry(1.45, 1.45, 0.48, 32);
-      const screenMesh = new THREE.Mesh(screenGeom, cyanGlowMat);
-      group.add(screenMesh);
-
-      // Digital Crown
-      const crownGeom = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 16);
-      const crownMesh = new THREE.Mesh(crownGeom, brushedChromeMat);
-      crownMesh.rotation.z = Math.PI / 2;
-      crownMesh.position.set(1.7, 0, 0);
-      group.add(crownMesh);
-
-      // Straps
-      const strapGeom = new THREE.BoxGeometry(1.5, 0.2, 2.2);
-      const topStrap = new THREE.Mesh(strapGeom, leatherMat);
-      topStrap.position.set(0, 0, 1.8);
-      group.add(topStrap);
-
-      const bottomStrap = new THREE.Mesh(strapGeom, leatherMat);
-      bottomStrap.position.set(0, 0, -1.8);
-      group.add(bottomStrap);
-
-    } else if (cat.includes('mobile') || cat.includes('phone')) {
-      // 2. Cyber Smartphone
-      // Chassis
-      const chassisGeom = new THREE.BoxGeometry(2.0, 4.0, 0.3);
-      const chassisMesh = new THREE.Mesh(chassisGeom, metalMat);
-      group.add(chassisMesh);
-
-      // Screen
-      const screenGeom = new THREE.BoxGeometry(1.88, 3.88, 0.32);
-      const screenMesh = new THREE.Mesh(screenGeom, glassMat);
-      group.add(screenMesh);
-
-      // Camera Island
-      const camIslandGeom = new THREE.BoxGeometry(0.8, 1.2, 0.15);
-      const camIslandMesh = new THREE.Mesh(camIslandGeom, metalMat);
-      camIslandMesh.position.set(-0.45, 1.2, -0.2);
-      group.add(camIslandMesh);
-
-      // Camera Lenses
-      for (let i = 0; i < 3; i++) {
-        const lensGeom = new THREE.CylinderGeometry(0.14, 0.14, 0.25, 16);
-        const lensMesh = new THREE.Mesh(lensGeom, cyanGlowMat);
-        lensMesh.rotation.x = Math.PI / 2;
-        lensMesh.position.set(-0.45, 1.5 - i * 0.32, -0.25);
-        group.add(lensMesh);
-      }
-
-    } else {
-      // 3. Flagship Headphones (Default / Electronics / Audio)
-      // Headband Arc
-      const bandGeom = new THREE.TorusGeometry(2.3, 0.18, 16, 48, Math.PI);
-      const bandMesh = new THREE.Mesh(bandGeom, metalMat);
-      bandMesh.rotation.z = Math.PI;
-      group.add(bandMesh);
-
-      // Headband Cushion
-      const cushionGeom = new THREE.TorusGeometry(2.28, 0.14, 16, 32, Math.PI * 0.6);
-      const cushionMesh = new THREE.Mesh(cushionGeom, leatherMat);
-      cushionMesh.rotation.z = Math.PI * 1.2;
-      group.add(cushionMesh);
-
-      // Left & Right Ear Cups
-      const cupGeom = new THREE.CylinderGeometry(1.0, 1.05, 0.6, 32);
-      const padGeom = new THREE.TorusGeometry(0.85, 0.28, 16, 32);
-
-      // Left Cup
-      const leftCupGroup = new THREE.Group();
-      const leftCup = new THREE.Mesh(cupGeom, brushedChromeMat);
-      leftCup.rotation.z = Math.PI / 2;
-      leftCupGroup.add(leftCup);
-
-      const leftRing = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.04, 16, 32), cyanGlowMat);
-      leftRing.rotation.y = Math.PI / 2;
-      leftRing.position.set(0.28, 0, 0);
-      leftCupGroup.add(leftRing);
-
-      const leftPad = new THREE.Mesh(padGeom, leatherMat);
-      leftPad.rotation.y = Math.PI / 2;
-      leftPad.position.set(-0.32, 0, 0);
-      leftCupGroup.add(leftPad);
-
-      leftCupGroup.position.set(-2.4, -0.6, 0);
-      leftCupGroup.rotation.y = 0.2;
-      group.add(leftCupGroup);
-
-      // Right Cup
-      const rightCupGroup = new THREE.Group();
-      const rightCup = new THREE.Mesh(cupGeom, brushedChromeMat);
-      rightCup.rotation.z = Math.PI / 2;
-      rightCupGroup.add(rightCup);
-
-      const rightRing = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.04, 16, 32), cyanGlowMat);
-      rightRing.rotation.y = Math.PI / 2;
-      rightRing.position.set(-0.28, 0, 0);
-      rightCupGroup.add(rightRing);
-
-      const rightPad = new THREE.Mesh(padGeom, leatherMat);
-      rightPad.rotation.y = Math.PI / 2;
-      rightPad.position.set(0.32, 0, 0);
-      rightCupGroup.add(rightPad);
-
-      rightCupGroup.position.set(2.4, -0.6, 0);
-      rightCupGroup.rotation.y = -0.2;
-      group.add(rightCupGroup);
+  // Reset view to original default angle
+  const handleResetView = useCallback(() => {
+    if (controlsRef.current && cameraRef.current) {
+      controlsRef.current.reset();
+      cameraRef.current.position.set(0, 1.2, 6.5);
+      cameraRef.current.lookAt(0, 0, 0);
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
     }
-
-    // Contact Soft Shadow Plane underneath model
-    const shadowCanvas = document.createElement('canvas');
-    shadowCanvas.width = 128;
-    shadowCanvas.height = 128;
-    const ctx = shadowCanvas.getContext('2d');
-    if (ctx) {
-      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(0, 0, 0, 0.7)');
-      grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 128, 128);
-    }
-    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
-    const shadowGeom = new THREE.PlaneGeometry(6, 6);
-    const shadowMat = new THREE.MeshBasicMaterial({
-      map: shadowTexture,
-      transparent: true,
-      opacity: 0.65,
-      depthWrite: false,
-    });
-    const shadowMesh = new THREE.Mesh(shadowGeom, shadowMat);
-    shadowMesh.rotation.x = -Math.PI / 2;
-    shadowMesh.position.y = -2.2;
-    group.add(shadowMesh);
-
-    return group;
   }, []);
 
-  // Initialize Scene, Camera, Studio Lighting, and Renderer
+  // Initialize Three.js scene, camera, lights, controls, and load model
   useEffect(() => {
+    let isMounted = true;
+
     if (!checkWebGLSupport()) {
       setWebGlSupported(false);
       setIsLoading(false);
+      onActiveChange?.(false);
       return;
     }
 
@@ -251,8 +105,8 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    let width = container.clientWidth || 400;
-    let height = container.clientHeight || 400;
+    const width = container.clientWidth || 400;
+    const height = container.clientHeight || 400;
 
     // 1. Scene
     const scene = new THREE.Scene();
@@ -260,9 +114,10 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
 
     // 2. Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0.5, 7.5);
+    camera.position.set(0, 1.2, 6.5);
+    cameraRef.current = camera;
 
-    // 3. Renderer with power-preference high-performance
+    // 3. WebGLRenderer (without forceContextLoss on cleanup)
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
@@ -277,47 +132,120 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
       renderer.toneMappingExposure = 1.2;
       rendererRef.current = renderer;
     } catch (err: any) {
-      console.warn('WebGL Renderer Initialization failed:', err);
-      setWebGlSupported(false);
-      setIsLoading(false);
+      console.warn('WebGL Renderer initialization error:', err);
+      if (isMounted) {
+        setWebGlSupported(false);
+        setIsLoading(false);
+        onActiveChange?.(false);
+      }
       return;
     }
 
-    // 4. Restrained Studio Lighting Setup
-    // Ambient light (Deep cosmic base)
-    const ambientLight = new THREE.AmbientLight(0x0f172a, 1.2);
+    // 4. Smooth OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.autoRotate = autoRotate && !shouldReduceMotion;
+    controls.autoRotateSpeed = 1.8;
+    controls.minDistance = 2.8;
+    controls.maxDistance = 11.0;
+    controls.maxPolarAngle = Math.PI / 2 + 0.2;
+    controls.enablePan = false; // Keep product centered
+    controlsRef.current = controls;
+
+    // 5. Studio Lighting Setup
+    const ambientLight = new THREE.AmbientLight(0xf8fafc, 1.2);
     scene.add(ambientLight);
 
-    // Key Light (Crisp directional white)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
     keyLight.position.set(5, 8, 6);
     scene.add(keyLight);
 
-    // Cyber Cyan Rim Light (Rear specular glint)
-    const rimCyanLight = new THREE.DirectionalLight(0x06b6d4, 3.0);
-    rimCyanLight.position.set(-6, 3, -4);
-    scene.add(rimCyanLight);
+    const cyanRimLight = new THREE.DirectionalLight(0x06b6d4, 2.8);
+    cyanRimLight.position.set(-6, 4, -4);
+    scene.add(cyanRimLight);
 
-    // Electric Indigo Accent Light (Subtle bottom fill)
-    const fillIndigoLight = new THREE.DirectionalLight(0x6366f1, 1.5);
-    fillIndigoLight.position.set(3, -4, -2);
-    scene.add(fillIndigoLight);
+    const indigoFillLight = new THREE.DirectionalLight(0x6366f1, 1.4);
+    indigoFillLight.position.set(4, -3, -2);
+    scene.add(indigoFillLight);
 
-    // 5. Build and add product mesh
-    const productGroup = createProductMesh(categorySlug);
-    productGroupRef.current = productGroup;
-    scene.add(productGroup);
+    // Soft Contact Shadow Plane underneath product
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = 128;
+    shadowCanvas.height = 128;
+    const ctx = shadowCanvas.getContext('2d');
+    if (ctx) {
+      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0.7)');
+      grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.25)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    const shadowGeom = new THREE.PlaneGeometry(6, 6);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: shadowTexture,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+    });
+    const shadowMesh = new THREE.Mesh(shadowGeom, shadowMat);
+    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.position.y = -1.8;
+    scene.add(shadowMesh);
 
-    setIsLoading(false);
+    // 6. Load authentic binary GLB model using GLTFLoader
+    setIsLoading(true);
+    setLoadError(null);
 
-    // 6. Animation Loop with FPS tracking & controlled damping
+    const loader = new GLTFLoader();
+    loader.load(
+      activeModelUrl,
+      (gltf) => {
+        if (!isMounted) return;
+
+        // Clean up previous model if re-loading
+        if (currentModelRef.current) {
+          scene.remove(currentModelRef.current);
+        }
+
+        const model = gltf.scene;
+        currentModelRef.current = model;
+
+        // Auto-center and normalize scale
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const targetScale = 3.6 / maxDim;
+
+        model.scale.set(targetScale, targetScale, targetScale);
+        model.position.set(-center.x * targetScale, -center.y * targetScale, -center.z * targetScale);
+
+        scene.add(model);
+        setIsLoading(false);
+        setLoadError(null);
+        onActiveChange?.(true);
+      },
+      undefined,
+      (err) => {
+        if (!isMounted) return;
+        console.error('Failed to load 3D GLB model from:', activeModelUrl, err);
+        setIsLoading(false);
+        setLoadError(`Unable to load 3D model asset (${activeModelUrl.split('/').pop()}).`);
+        onActiveChange?.(false);
+      }
+    );
+
+    // 7. Animation Loop with FPS tracking and OrbitControls update
     let frameCount = 0;
     let fpsTimer = performance.now();
 
     const animate = (currentTime: number) => {
       animFrameIdRef.current = requestAnimationFrame(animate);
 
-      // FPS tracking
+      // Real-time FPS metric calculation
       frameCount++;
       if (currentTime - fpsTimer >= 1000) {
         setFps(Math.round((frameCount * 1000) / (currentTime - fpsTimer)));
@@ -325,60 +253,42 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         fpsTimer = currentTime;
       }
 
-      if (productGroupRef.current) {
-        // Auto-rotation when not dragging
-        if (autoRotate && !isDraggingRef.current && !shouldReduceMotion) {
-          targetRotationRef.current.y += 0.006;
-        }
-
-        // Inertial damping
-        if (!isDraggingRef.current) {
-          targetRotationRef.current.x += rotationVelocityRef.current.x;
-          targetRotationRef.current.y += rotationVelocityRef.current.y;
-          rotationVelocityRef.current.x *= 0.92;
-          rotationVelocityRef.current.y *= 0.92;
-        }
-
-        // Clamp vertical tilt to prevent awkward flip
-        targetRotationRef.current.x = Math.max(-0.6, Math.min(0.6, targetRotationRef.current.x));
-
-        // Smooth slerp towards target rotation
-        productGroupRef.current.rotation.x += (targetRotationRef.current.x - productGroupRef.current.rotation.x) * 0.12;
-        productGroupRef.current.rotation.y += (targetRotationRef.current.y - productGroupRef.current.rotation.y) * 0.12;
-      }
-
+      controls.update();
       renderer.render(scene, camera);
     };
 
     animFrameIdRef.current = requestAnimationFrame(animate);
 
-    // 7. Responsive Resize Observer
-    const handleResize = () => {
-      if (!container || !rendererRef.current) return;
-      const newWidth = container.clientWidth;
-      const newHeight = container.clientHeight;
-      camera.aspect = newWidth / newHeight;
-      camera.updateProjectionMatrix();
-      rendererRef.current.setSize(newWidth, newHeight);
-    };
+    // 8. Responsive ResizeObserver
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width: w, height: h } = entry.contentRect;
+        if (w > 0 && h > 0 && rendererRef.current && cameraRef.current) {
+          cameraRef.current.aspect = w / h;
+          cameraRef.current.updateProjectionMatrix();
+          rendererRef.current.setSize(w, h);
+        }
+      }
+    });
+    resizeObserver.observe(container);
 
-    window.addEventListener('resize', handleResize);
-
-    // 8. Proper Cleanup on Unmount
+    // 9. Component Unmount and Resource Disposal
     return () => {
-      window.removeEventListener('resize', handleResize);
+      isMounted = false;
+      onActiveChange?.(false);
+      resizeObserver.disconnect();
 
       if (animFrameIdRef.current) {
         cancelAnimationFrame(animFrameIdRef.current);
       }
 
-      // Deep resource disposal to prevent WebGL memory leaks
+      controls.dispose();
+
+      // Deep disposal of scene objects to prevent WebGL memory leaks
       scene.traverse((object) => {
         if ((object as THREE.Mesh).isMesh) {
           const mesh = object as THREE.Mesh;
-          if (mesh.geometry) {
-            mesh.geometry.dispose();
-          }
+          if (mesh.geometry) mesh.geometry.dispose();
           if (mesh.material) {
             if (Array.isArray(mesh.material)) {
               mesh.material.forEach((mat) => mat.dispose());
@@ -389,53 +299,30 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         }
       });
 
+      shadowGeom.dispose();
+      shadowMat.dispose();
+      shadowTexture.dispose();
+
       renderer.dispose();
-      renderer.forceContextLoss();
+      // DO NOT call renderer.forceContextLoss() here, as React StrictMode mounts/unmounts
+      // on the exact same canvas element, which causes context-loss precision errors.
+
       sceneRef.current = null;
       rendererRef.current = null;
-      productGroupRef.current = null;
+      controlsRef.current = null;
+      cameraRef.current = null;
+      currentModelRef.current = null;
     };
-  }, [categorySlug, createProductMesh, autoRotate, shouldReduceMotion]);
+  }, [activeModelUrl, autoRotate, shouldReduceMotion, retryCount, onActiveChange]);
 
-  // Pointer Interaction Handlers for Controlled 3D Orbiting
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    isDraggingRef.current = true;
-    previousPointerPosRef.current = { x: e.clientX, y: e.clientY };
-    rotationVelocityRef.current = { x: 0, y: 0 };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  };
+  // Sync autoRotate state with controls
+  useEffect(() => {
+    if (controlsRef.current) {
+      controlsRef.current.autoRotate = autoRotate && !shouldReduceMotion;
+    }
+  }, [autoRotate, shouldReduceMotion]);
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDraggingRef.current) return;
-
-    const deltaX = e.clientX - previousPointerPosRef.current.x;
-    const deltaY = e.clientY - previousPointerPosRef.current.y;
-
-    previousPointerPosRef.current = { x: e.clientX, y: e.clientY };
-
-    const sensitivity = 0.007;
-    targetRotationRef.current.y += deltaX * sensitivity;
-    targetRotationRef.current.x += deltaY * sensitivity;
-
-    rotationVelocityRef.current = {
-      x: deltaY * sensitivity * 0.5,
-      y: deltaX * sensitivity * 0.5,
-    };
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    isDraggingRef.current = false;
-    try {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {}
-  };
-
-  const handleResetView = () => {
-    targetRotationRef.current = { x: 0.15, y: -0.3 };
-    rotationVelocityRef.current = { x: 0, y: 0 };
-  };
-
-  // If WebGL is not supported, show graceful high-fidelity fallback
+  // If WebGL is not supported, show high-resolution photo fallback
   if (!webGlSupported) {
     return (
       <div className={`relative aspect-square w-full rounded-3xl overflow-hidden fts-glass-panel fts-specular-edge border border-slate-700/60 p-6 flex flex-col items-center justify-center text-center ${className}`}>
@@ -444,18 +331,18 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
           alt={productName}
           className="max-h-56 max-w-full object-contain filter drop-shadow-2xl mb-4"
         />
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-cyan-300 border border-cyan-500/30 text-xs font-semibold backdrop-blur-md mb-2">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-amber-300 border border-amber-500/30 text-xs font-semibold backdrop-blur-md mb-2">
           <AlertCircle className="w-4 h-4 text-amber-400" />
-          <span>Interactive 3D fallback active</span>
+          <span>WebGL acceleration unavailable</span>
         </div>
-        <p className="text-xs text-slate-400 max-w-xs">
-          Your browser environment is displaying our high-resolution visual render with zero performance degradation.
+        <p className="text-xs text-slate-400 max-w-xs mb-3">
+          Displaying high-resolution visual render with full color fidelity.
         </p>
         {onSwitchToPhoto && (
           <button
             type="button"
             onClick={onSwitchToPhoto}
-            className="mt-3 text-xs font-bold text-cyan-400 hover:text-cyan-300 underline"
+            className="text-xs font-bold text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
           >
             Switch to High-Res Photo View
           </button>
@@ -472,12 +359,8 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
       {/* Three.js Rendering Canvas */}
       <canvas
         ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
         className="w-full h-full cursor-grab active:cursor-grabbing touch-none block"
-        aria-label={`Interactive 3D model of ${productName}. Drag to rotate.`}
+        aria-label={`Interactive 3D model of ${productName}. Drag to rotate, scroll to zoom.`}
       />
 
       {/* Loading Skeleton */}
@@ -491,25 +374,64 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 animate-spin">
               <RefreshCw className="w-6 h-6" />
             </div>
-            <p className="text-xs font-bold text-cyan-300">Initializing 3D Engine...</p>
+            <p className="text-xs font-bold text-cyan-300 font-mono tracking-wide">
+              Loading 3D Model Asset...
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Top Overlay Badge & 3D Indicator */}
+      {/* Error Overlay with Retry & Fallback option */}
+      <AnimatePresence>
+        {loadError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-30 fts-glass-panel flex flex-col items-center justify-center gap-3 p-6 text-center backdrop-blur-xl bg-slate-950/85"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-bold text-slate-200 max-w-xs">{loadError}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => setRetryCount((c) => c + 1)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry 3D Studio</span>
+              </button>
+              {onSwitchToPhoto && (
+                <button
+                  type="button"
+                  onClick={onSwitchToPhoto}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>2D Photos</span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Top Overlay Badge & Live FPS */}
       <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-20">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-900/80 text-cyan-300 border border-cyan-500/40 shadow-lg backdrop-blur-md">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-900/85 text-cyan-300 border border-cyan-500/40 shadow-lg backdrop-blur-md">
           <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
           <span>Real-Time 3D Studio</span>
         </div>
 
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono text-slate-400 bg-slate-950/80 border border-slate-800 backdrop-blur-md">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono text-slate-400 bg-slate-950/85 border border-slate-800 backdrop-blur-md">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
           <span>{fps} FPS</span>
         </div>
       </div>
 
-      {/* Drag & Rotation Guide Overlay */}
+      {/* Controls and Interaction Bar */}
       <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
         <div className="flex items-center gap-2">
           {/* Reset Camera View */}
@@ -518,7 +440,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
             onClick={handleResetView}
             aria-label="Reset 3D camera orientation"
             title="Reset Orientation"
-            className="p-2.5 rounded-2xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 shadow-lg backdrop-blur-md transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            className="p-2.5 rounded-2xl bg-slate-900/85 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 shadow-lg backdrop-blur-md transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -532,7 +454,7 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
             className={`p-2.5 rounded-2xl border shadow-lg backdrop-blur-md transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
               autoRotate
                 ? 'bg-blue-600/30 border-blue-500/50 text-cyan-300'
-                : 'bg-slate-900/80 border-slate-700/60 text-slate-400 hover:text-white'
+                : 'bg-slate-900/85 border-slate-700/60 text-slate-400 hover:text-white'
             }`}
           >
             <RotateCw className={`w-4 h-4 ${autoRotate ? 'animate-spin' : ''}`} style={{ animationDuration: '6s' }} />
@@ -540,9 +462,10 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
         </div>
 
         {/* Interaction Hint Pill */}
-        <span className="text-[11px] font-medium text-slate-400 bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 rounded-xl backdrop-blur-md hidden sm:inline-block">
-          Click & Drag to Rotate 360°
-        </span>
+        <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400 bg-slate-950/80 border border-slate-800/80 px-3 py-1.5 rounded-xl backdrop-blur-md">
+          <ZoomIn className="w-3 h-3 text-cyan-400" />
+          <span>Drag to Rotate • Scroll to Zoom</span>
+        </div>
 
         {/* Switch back to 2D Photo View */}
         {onSwitchToPhoto && (
@@ -560,4 +483,5 @@ export const Product3DViewer: React.FC<Product3DViewerProps> = ({
     </div>
   );
 };
+
 export default Product3DViewer;

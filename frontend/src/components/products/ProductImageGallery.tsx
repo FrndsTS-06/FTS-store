@@ -29,6 +29,7 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
 
   // Mode: 2D Photo vs Interactive 3D Studio
   const [viewMode, setViewMode] = useState<'photo' | '3d'>('photo');
+  const [is3DStudioActive, setIs3DStudioActive] = useState(false);
 
   // Sorted gallery images
   const galleryList = images.length > 0
@@ -98,6 +99,7 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
       <div className="flex items-center justify-between">
         <div className="inline-flex items-center p-1 rounded-2xl fts-glass-card border border-slate-800 shadow-sm">
           <button
+            id="switch-to-photo-btn"
             type="button"
             onClick={() => setViewMode('photo')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -110,6 +112,7 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             <span>2D Photo Stage</span>
           </button>
           <button
+            id="switch-to-3d-btn"
             type="button"
             onClick={() => setViewMode('3d')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -123,7 +126,7 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           </button>
         </div>
 
-        {viewMode === '3d' && (
+        {viewMode === '3d' && is3DStudioActive && (
           <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-xl hidden sm:inline-block">
             WebGL 3D Studio Active
           </span>
@@ -147,6 +150,7 @@ export const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             categorySlug={categorySlug}
             fallbackImage={currentSrc}
             onSwitchToPhoto={() => setViewMode('photo')}
+            onActiveChange={setIs3DStudioActive}
           />
         </Suspense>
       ) : (
