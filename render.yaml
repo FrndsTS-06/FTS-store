@@ -1,10 +1,3 @@
-databases:
-  - name: fts-store-db
-    databaseName: fts_store
-    user: fts_user
-    region: oregon
-    plan: free
-
 services:
   # ============================================================================
   # 1. FastAPI REST API Backend
@@ -23,9 +16,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: fts-store-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: ADMIN_API_KEY
