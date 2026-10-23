@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.api.deps import get_db, get_current_admin
-from app.models import Category, Product
+from app.models import Category, Product, User
 from app.schemas.catalog import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.core.errors import AppException
 from app.services.admin_service import log_audit_event
