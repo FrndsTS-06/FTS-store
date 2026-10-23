@@ -100,6 +100,7 @@ def upgrade() -> None:
     op.create_table('orders',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('order_number', sa.String(length=40), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=100), nullable=True),
     sa.Column('user_id', sa.String(length=36), nullable=True),
     sa.Column('guest_email', sa.String(length=255), nullable=True),
     sa.Column('status', sa.Enum('PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', name='orderstatus', native_enum=False), nullable=False),

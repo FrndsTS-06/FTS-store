@@ -35,7 +35,11 @@ def upgrade() -> None:
         )
         op.create_index(op.f('ix_newsletter_subscriptions_email'), 'newsletter_subscriptions', ['email'], unique=True)
 
-    # Safe index creation for orders idempotency_key
+    # Safe column and index creation for orders idempotency_key
+    order_columns = [col['name'] for col in inspector.get_columns('orders')]
+    if 'idempotency_key' not in order_columns:
+        op.add_column('orders', sa.Column('idempotency_key', sa.String(length=100), nullable=True))
+
     order_indexes = [idx['name'] for idx in inspector.get_indexes('orders')]
     if 'ix_orders_idempotency_key' not in order_indexes:
         op.create_index(op.f('ix_orders_idempotency_key'), 'orders', ['idempotency_key'], unique=True)
