@@ -32,7 +32,8 @@ import {
   AuditEvent,
 } from '../types/admin';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
+const API_BASE_URL = rawBaseUrl.endsWith('/api/v1') ? rawBaseUrl : `${rawBaseUrl}/api/v1`;
 const SESSION_ID_KEY = 'fts_cart_session_id';
 const AUTH_TOKEN_KEY = 'fts_auth_token';
 
