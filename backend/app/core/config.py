@@ -83,10 +83,13 @@ class Settings(BaseSettings):
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
-    def normalize_database_url(cls, v: str) -> str:
-        if isinstance(v, str) and v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql://", 1)
-        return v
+    def normalize_database_url(cls, v: Optional[str]) -> str:
+        if v is None or not str(v).strip():
+            return _DEFAULT_DB_URL
+        v_str = str(v).strip()
+        if v_str.startswith("postgres://"):
+            return v_str.replace("postgres://", "postgresql://", 1)
+        return v_str
 
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() in ["production", "prod"]

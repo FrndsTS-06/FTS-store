@@ -21,17 +21,17 @@ if [ "${AUTO_SEED_DATA:-false}" = "true" ]; then
     python -m app.db.seed
 fi
 
-# Step 4: Start Application with Production Gunicorn / Uvicorn Workers
-CONCURRENCY=${WEB_CONCURRENCY:-2}
-BIND_HOST=${HOST:-0.0.0.0}
-BIND_PORT=${PORT:-8000}
+# Step 4: Start Application
+BIND_HOST="0.0.0.0"
+BIND_PORT="${PORT:-8000}"
+CONCURRENCY="${WEB_CONCURRENCY:-2}"
 
-echo "Starting Gunicorn server with ${CONCURRENCY} workers on ${BIND_HOST}:${BIND_PORT}..."
+echo "Starting server on ${BIND_HOST}:${BIND_PORT} (concurrency: ${CONCURRENCY})..."
 exec gunicorn app.main:app \
     --workers "${CONCURRENCY}" \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind "${BIND_HOST}:${BIND_PORT}" \
-    --timeout 60 \
+    --timeout 120 \
     --keep-alive 5 \
     --access-logfile - \
     --error-logfile - \
