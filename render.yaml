@@ -16,8 +16,7 @@ services:
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    preDeployCommand: bash scripts/release.sh
-    startCommand: gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT --forwarded-allow-ips='*'
+    startCommand: bash scripts/entrypoint.sh
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -51,8 +50,6 @@ services:
     name: fts-store-frontend
     runtime: static
     rootDir: frontend
-    region: oregon
-    plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     routes:

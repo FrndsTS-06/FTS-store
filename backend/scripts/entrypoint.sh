@@ -15,8 +15,14 @@ if [ "${AUTO_BOOTSTRAP_ADMIN:-false}" = "true" ]; then
     python scripts/bootstrap_admin.py
 fi
 
-# Step 3: Start Application with Production Gunicorn / Uvicorn Workers
-CONCURRENCY=${WEB_CONCURRENCY:-4}
+# Step 3: Seed initial catalog data if configured
+if [ "${AUTO_SEED_DATA:-false}" = "true" ]; then
+    echo "Seeding initial catalog data..."
+    python -m app.db.seed
+fi
+
+# Step 4: Start Application with Production Gunicorn / Uvicorn Workers
+CONCURRENCY=${WEB_CONCURRENCY:-2}
 BIND_HOST=${HOST:-0.0.0.0}
 BIND_PORT=${PORT:-8000}
 
